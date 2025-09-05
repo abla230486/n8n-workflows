@@ -8216,6 +8216,22 @@
     "category": "Communication & Messaging"
   },
   {
+    "filename": "2054_Manus_MultiPlatform_AI_Agent_Webhook.json",
+    "category": "AI Agent Development"
+  },
+  {
+    "filename": "2055_Manus_Task_Automation_Agent_Scheduled.json",
+    "category": "AI Agent Development"
+  },
+  {
+    "filename": "2056_Manus_Intelligent_File_Processor_Webhook.json",
+    "category": "AI Agent Development"
+  },
+  {
+    "filename": "Academic Assistant Chatbot (Telegram + OpenAI).json",
+    "category": "Communication & Messaging"
+  },
+  {
     "filename": "generate-collaborative-handbooks-with-gpt4o-multi-agent-orchestration-human-review.json",
     "category": "AI Agent Development"
   }

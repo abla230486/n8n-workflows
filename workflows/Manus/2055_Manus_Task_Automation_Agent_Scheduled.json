@@ -1,0 +1,670 @@
+{
+  "id": "ManusTaskAutomation2055",
+  "meta": {
+    "instanceId": "manus-task-automation-instance",
+    "templateCredsSetupCompleted": false
+  },
+  "name": "Manus - Task Automation Agent",
+  "tags": ["ai-agent", "manus", "automation", "tasks", "productivity"],
+  "nodes": [
+    {
+      "id": "schedule-trigger",
+      "name": "Scheduled Task Check",
+      "type": "n8n-nodes-base.cron",
+      "position": [200, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minute",
+              "minuteInterval": 15
+            }
+          ]
+        }
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "get-pending-tasks",
+      "name": "Get Pending Tasks",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [400, 300],
+      "parameters": {
+        "operation": "readOrSearch",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "YOUR_TASKS_SHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "Manus Tasks"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {}
+        },
+        "filters": {
+          "conditions": [
+            {
+              "id": "status-filter",
+              "leftValue": "={{ $json.Status }}",
+              "rightValue": "pending",
+              "operation": "equal"
+            }
+          ],
+          "combineOperation": "AND"
+        },
+        "options": {
+          "rangeDefinition": "specifyRange",
+          "range": "A:H"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets API"
+        }
+      },
+      "typeVersion": 4
+    },
+    {
+      "id": "process-each-task",
+      "name": "Process Each Task",
+      "type": "n8n-nodes-base.splitInBatches",
+      "position": [600, 300],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "typeVersion": 3
+    },
+    {
+      "id": "ai-task-processor",
+      "name": "Manus Task Processor",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "position": [800, 300],
+      "parameters": {
+        "sessionIdTemplate": "manus-task-{{ $json.TaskID }}",
+        "promptTemplate": "You are Manus, an AI task automation agent. Process the following task:\n\nTask ID: {{ $json.TaskID }}\nTask Type: {{ $json.TaskType }}\nDescription: {{ $json.Description }}\nPriority: {{ $json.Priority }}\nRequested By: {{ $json.RequestedBy }}\nDue Date: {{ $json.DueDate }}\nParameters: {{ $json.Parameters }}\n\nBased on the task type, determine the appropriate action and execute it. Available task types:\n- email_send: Send emails to specified recipients\n- data_sync: Synchronize data between systems\n- report_generate: Generate and send reports\n- notification_send: Send notifications across platforms\n- calendar_event: Create or update calendar events\n- file_process: Process files (convert, analyze, etc.)\n- api_call: Make API calls to external services\n- webhook_trigger: Trigger other workflows\n\nRespond with the action taken and any results or errors.",
+        "options": {
+          "systemMessage": "You are Manus Task Processor with these capabilities:\n\n1. **Email Automation**: Send emails with dynamic content\n2. **Data Integration**: Sync data between different platforms\n3. **Report Generation**: Create and distribute reports\n4. **Multi-Platform Notifications**: Send alerts across services\n5. **Calendar Management**: Schedule and manage events\n6. **File Operations**: Process, convert, and analyze files\n7. **API Integration**: Connect with external services\n8. **Workflow Orchestration**: Trigger other automation workflows\n\nAlways:\n- Validate input parameters before execution\n- Handle errors gracefully and provide clear feedback\n- Log all actions for audit purposes\n- Update task status upon completion\n- Follow security best practices",
+          "maxIterations": 3,
+          "returnIntermediateSteps": true
+        }
+      },
+      "typeVersion": 1.5
+    },
+    {
+      "id": "openai-task-model",
+      "name": "OpenAI Task Model",
+      "type": "@n8n/n8n-nodes-langchain.lmOpenAi",
+      "position": [760, 140],
+      "parameters": {
+        "model": "gpt-4",
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 800
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credentials",
+          "name": "OpenAI API"
+        }
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "task-type-router",
+      "name": "Task Type Router",
+      "type": "n8n-nodes-base.switch",
+      "position": [1000, 300],
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.TaskType }}",
+        "rules": {
+          "rules": [
+            {
+              "value2": "email_send",
+              "output": 0
+            },
+            {
+              "value2": "data_sync",
+              "output": 1
+            },
+            {
+              "value2": "report_generate",
+              "output": 2
+            },
+            {
+              "value2": "notification_send",
+              "output": 3
+            },
+            {
+              "value2": "calendar_event",
+              "output": 4
+            },
+            {
+              "value2": "file_process",
+              "output": 5
+            },
+            {
+              "value2": "api_call",
+              "output": 6
+            }
+          ]
+        },
+        "fallbackOutput": 7
+      },
+      "typeVersion": 3
+    },
+    {
+      "id": "email-task",
+      "name": "Execute Email Task",
+      "type": "n8n-nodes-base.emailSend",
+      "position": [1200, 100],
+      "parameters": {
+        "toEmail": "={{ JSON.parse($json.Parameters).recipients }}",
+        "subject": "={{ JSON.parse($json.Parameters).subject }}",
+        "message": "={{ JSON.parse($json.Parameters).message }}",
+        "options": {
+          "allowUnauthorizedCerts": false
+        }
+      },
+      "credentials": {
+        "smtp": {
+          "id": "smtp-credentials",
+          "name": "SMTP"
+        }
+      },
+      "typeVersion": 2.1
+    },
+    {
+      "id": "data-sync-task",
+      "name": "Execute Data Sync",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1200, 150],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ JSON.parse($json.Parameters).sync_endpoint }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "source",
+              "value": "={{ JSON.parse($json.Parameters).source }}"
+            },
+            {
+              "name": "destination",
+              "value": "={{ JSON.parse($json.Parameters).destination }}"
+            },
+            {
+              "name": "data_type",
+              "value": "={{ JSON.parse($json.Parameters).data_type }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-credentials",
+          "name": "API Authentication"
+        }
+      },
+      "typeVersion": 4.1
+    },
+    {
+      "id": "report-task",
+      "name": "Generate Report",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [1200, 200],
+      "parameters": {
+        "operation": "create",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "YOUR_REPORTS_SHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "Generated Reports"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Timestamp": "={{ $now }}",
+            "Report Type": "={{ JSON.parse($json.Parameters).report_type }}",
+            "Generated By": "Manus AI Agent",
+            "Task ID": "={{ $json.TaskID }}",
+            "Status": "Generated"
+          }
+        },
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets API"
+        }
+      },
+      "typeVersion": 4
+    },
+    {
+      "id": "notification-task",
+      "name": "Send Notification",
+      "type": "n8n-nodes-base.slack",
+      "position": [1200, 250],
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "channel": "={{ JSON.parse($json.Parameters).channel }}",
+        "text": "🤖 *Manus AI Notification*\n\n{{ JSON.parse($json.Parameters).message }}\n\n_Task ID: {{ $json.TaskID }}_",
+        "otherOptions": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "id": "slack-credentials",
+          "name": "Slack API"
+        }
+      },
+      "typeVersion": 2.1
+    },
+    {
+      "id": "calendar-task",
+      "name": "Create Calendar Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "position": [1200, 300],
+      "parameters": {
+        "resource": "event",
+        "operation": "create",
+        "calendarId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "primary"
+        },
+        "start": "={{ JSON.parse($json.Parameters).start_time }}",
+        "end": "={{ JSON.parse($json.Parameters).end_time }}",
+        "summary": "={{ JSON.parse($json.Parameters).title }}",
+        "description": "={{ JSON.parse($json.Parameters).description }}\n\nCreated by Manus AI Agent\nTask ID: {{ $json.TaskID }}",
+        "options": {}
+      },
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "google-calendar-credentials",
+          "name": "Google Calendar API"
+        }
+      },
+      "typeVersion": 1.2
+    },
+    {
+      "id": "file-process-task",
+      "name": "Process File",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "position": [1200, 350],
+      "parameters": {
+        "workflowId": "file-processing-workflow-id",
+        "source": "parameter",
+        "workflowInputData": {
+          "file_path": "={{ JSON.parse($json.Parameters).file_path }}",
+          "operation": "={{ JSON.parse($json.Parameters).operation }}",
+          "task_id": "={{ $json.TaskID }}"
+        }
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "api-call-task",
+      "name": "Execute API Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1200, 400],
+      "parameters": {
+        "method": "={{ JSON.parse($json.Parameters).method || 'POST' }}",
+        "url": "={{ JSON.parse($json.Parameters).endpoint }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": "={{ JSON.parse($json.Parameters).body_params || [] }}"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": "={{ JSON.parse($json.Parameters).headers || [] }}"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "api-credentials",
+          "name": "API Authentication"
+        }
+      },
+      "typeVersion": 4.1
+    },
+    {
+      "id": "fallback-task",
+      "name": "Unknown Task Type",
+      "type": "n8n-nodes-base.set",
+      "position": [1200, 450],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "error_message",
+              "name": "error_message",
+              "value": "Unknown task type: {{ $json.TaskType }}",
+              "type": "string"
+            },
+            {
+              "id": "task_id",
+              "name": "task_id",
+              "value": "={{ $json.TaskID }}",
+              "type": "string"
+            },
+            {
+              "id": "status",
+              "name": "status",
+              "value": "error",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "typeVersion": 3
+    },
+    {
+      "id": "update-task-status",
+      "name": "Update Task Status",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [1400, 300],
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "YOUR_TASKS_SHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "Manus Tasks"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Status": "completed",
+            "CompletedAt": "={{ $now }}",
+            "Result": "={{ $json.output || $json.result || 'Task completed successfully' }}"
+          }
+        },
+        "filters": {
+          "conditions": [
+            {
+              "id": "task-id-filter",
+              "leftValue": "={{ $json.TaskID }}",
+              "rightValue": "TaskID",
+              "operation": "equal"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets API"
+        }
+      },
+      "typeVersion": 4
+    },
+    {
+      "id": "loop-back",
+      "name": "Continue Processing",
+      "type": "n8n-nodes-base.noOp",
+      "position": [800, 500],
+      "parameters": {},
+      "typeVersion": 1
+    }
+  ],
+  "connections": {
+    "Scheduled Task Check": {
+      "main": [
+        [
+          {
+            "node": "Get Pending Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Pending Tasks": {
+      "main": [
+        [
+          {
+            "node": "Process Each Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Each Task": {
+      "main": [
+        [
+          {
+            "node": "Manus Task Processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manus Task Processor": {
+      "main": [
+        [
+          {
+            "node": "Task Type Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Task Type Router": {
+      "main": [
+        [
+          {
+            "node": "Execute Email Task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Execute Data Sync",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Calendar Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Execute API Call",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unknown Task Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Email Task": {
+      "main": [
+        [
+          {
+            "node": "Update Task Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Data Sync": {
+      "main": [
+        [
+          {
+            "node": "Update Task Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Report": {
+      "main": [
+        [
+          {
+            "node": "Update Task Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Notification": {
+      "main": [
+        [
+          {
+            "node": "Update Task Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Calendar Event": {
+      "main": [
+        [
+          {
+            "node": "Update Task Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process File": {
+      "main": [
+        [
+          {
+            "node": "Update Task Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute API Call": {
+      "main": [
+        [
+          {
+            "node": "Update Task Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unknown Task Type": {
+      "main": [
+        [
+          {
+            "node": "Update Task Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Task Status": {
+      "main": [
+        [
+          {
+            "node": "Continue Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Continue Processing": {
+      "main": [
+        [
+          {
+            "node": "Process Each Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Task Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Manus Task Processor",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": {},
+  "active": false,
+  "createdAt": "2024-09-05T19:13:00.000Z",
+  "updatedAt": "2024-09-05T19:13:00.000Z"
+}
