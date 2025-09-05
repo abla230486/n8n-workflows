@@ -1,0 +1,636 @@
+{
+  "id": "ManusFileProcessor2056",
+  "meta": {
+    "instanceId": "manus-file-processor-instance",
+    "templateCredsSetupCompleted": false
+  },
+  "name": "Manus - Intelligent File Processor",
+  "tags": ["ai-agent", "manus", "file-processing", "automation", "intelligent"],
+  "nodes": [
+    {
+      "id": "file-trigger",
+      "name": "File Upload Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "position": [200, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "manus-file-processor",
+        "responseMode": "responseNode",
+        "options": {
+          "noResponseBody": false
+        }
+      },
+      "webhookId": "manus-file-processor-2056",
+      "typeVersion": 1
+    },
+    {
+      "id": "extract-file-data",
+      "name": "Extract File Information",
+      "type": "n8n-nodes-base.set",
+      "position": [400, 300],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "file_url",
+              "name": "file_url",
+              "value": "={{ $json.body.file_url || $json.body.file_path }}",
+              "type": "string"
+            },
+            {
+              "id": "file_name",
+              "name": "file_name",
+              "value": "={{ $json.body.file_name || $json.body.filename }}",
+              "type": "string"
+            },
+            {
+              "id": "file_type",
+              "name": "file_type",
+              "value": "={{ $json.body.file_type || $json.body.content_type }}",
+              "type": "string"
+            },
+            {
+              "id": "processing_request",
+              "name": "processing_request",
+              "value": "={{ $json.body.request || $json.body.instruction || 'Analyze and process this file intelligently' }}",
+              "type": "string"
+            },
+            {
+              "id": "user_id",
+              "name": "user_id",
+              "value": "={{ $json.body.user_id || $json.body.uploaded_by || 'anonymous' }}",
+              "type": "string"
+            },
+            {
+              "id": "timestamp",
+              "name": "timestamp",
+              "value": "={{ $now }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "typeVersion": 3
+    },
+    {
+      "id": "download-file",
+      "name": "Download File",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [600, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Extract File Information').item.json.file_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "typeVersion": 4.1
+    },
+    {
+      "id": "file-type-detector",
+      "name": "Detect File Type",
+      "type": "n8n-nodes-base.switch",
+      "position": [800, 300],
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $('Extract File Information').item.json.file_type }}",
+        "rules": {
+          "rules": [
+            {
+              "value2": "application/pdf",
+              "output": 0
+            },
+            {
+              "value2": "text/",
+              "operation": "startsWith",
+              "output": 1
+            },
+            {
+              "value2": "image/",
+              "operation": "startsWith",
+              "output": 2
+            },
+            {
+              "value2": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+              "output": 3
+            },
+            {
+              "value2": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+              "output": 4
+            },
+            {
+              "value2": "text/csv",
+              "output": 5
+            }
+          ]
+        },
+        "fallbackOutput": 6
+      },
+      "typeVersion": 3
+    },
+    {
+      "id": "pdf-processor",
+      "name": "Process PDF",
+      "type": "n8n-nodes-base.extractFromFile",
+      "position": [1000, 100],
+      "parameters": {
+        "operation": "extractFromPdf",
+        "options": {}
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "text-processor",
+      "name": "Process Text File",
+      "type": "n8n-nodes-base.extractFromFile",
+      "position": [1000, 150],
+      "parameters": {
+        "operation": "extractFromText",
+        "options": {}
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "image-processor",
+      "name": "Process Image",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "position": [1000, 200],
+      "parameters": {
+        "pythonCode": "# Image processing with OCR and analysis\nimport base64\nimport json\n\ndef process_image(binary_data, file_name, processing_request):\n    \"\"\"\n    Process image file with OCR and AI analysis\n    \"\"\"\n    try:\n        # Convert binary data to base64\n        image_base64 = base64.b64encode(binary_data).decode('utf-8')\n        \n        # Prepare image data for analysis\n        result = {\n            \"file_name\": file_name,\n            \"file_type\": \"image\",\n            \"base64_data\": image_base64,\n            \"processing_request\": processing_request,\n            \"status\": \"ready_for_ai_analysis\",\n            \"extracted_text\": \"Image processing requires AI vision model\",\n            \"analysis_needed\": True\n        }\n        \n        return json.dumps(result)\n    except Exception as e:\n        return json.dumps({\"error\": str(e), \"status\": \"failed\"})\n\n# Get input data\nbinary_data = _context['input']['binary']['data']\nfile_name = _context['input']['json']['file_name']\nprocessing_request = _context['input']['json']['processing_request']\n\n# Process the image\nresult = process_image(binary_data, file_name, processing_request)\nreturn {\"json\": json.loads(result)}"
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "excel-processor",
+      "name": "Process Excel",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "position": [1000, 250],
+      "parameters": {
+        "operation": "read",
+        "options": {}
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "word-processor",
+      "name": "Process Word Document",
+      "type": "n8n-nodes-base.extractFromFile",
+      "position": [1000, 300],
+      "parameters": {
+        "operation": "extractFromDocx",
+        "options": {}
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "csv-processor",
+      "name": "Process CSV",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "position": [1000, 350],
+      "parameters": {
+        "operation": "read",
+        "options": {
+          "headerRow": true
+        }
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "unknown-file-processor",
+      "name": "Process Unknown File",
+      "type": "n8n-nodes-base.set",
+      "position": [1000, 400],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "extracted_content",
+              "name": "extracted_content",
+              "value": "File type not directly supported. Binary data available for AI analysis.",
+              "type": "string"
+            },
+            {
+              "id": "file_info",
+              "name": "file_info",
+              "value": "{{ $('Extract File Information').item.json }}",
+              "type": "object"
+            },
+            {
+              "id": "needs_ai_analysis",
+              "name": "needs_ai_analysis",
+              "value": true,
+              "type": "boolean"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "typeVersion": 3
+    },
+    {
+      "id": "ai-file-analyzer",
+      "name": "Manus File Analyzer",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "position": [1200, 300],
+      "parameters": {
+        "sessionIdTemplate": "manus-file-{{ $('Extract File Information').item.json.user_id }}-{{ $now }}",
+        "promptTemplate": "You are Manus, an intelligent file processing agent. Analyze the following file data and fulfill the user's request.\n\nFile Information:\n- Name: {{ $('Extract File Information').item.json.file_name }}\n- Type: {{ $('Extract File Information').item.json.file_type }}\n- User Request: {{ $('Extract File Information').item.json.processing_request }}\n- Uploaded by: {{ $('Extract File Information').item.json.user_id }}\n\nExtracted Content:\n{{ $json.extracted_content || $json.data || $json.text || 'No text content extracted' }}\n\nPlease:\n1. Analyze the file content thoroughly\n2. Understand the user's specific request\n3. Provide insights, summaries, or perform the requested analysis\n4. If the file contains data, identify patterns, trends, or key information\n5. Suggest potential actions or next steps\n6. Format your response clearly and professionally\n\nFor images: If this is an image file, describe what you see and extract any text (OCR).\nFor documents: Summarize key points and themes.\nFor spreadsheets: Analyze data patterns and provide statistical insights.\nFor code files: Review code quality and suggest improvements.",
+        "options": {
+          "systemMessage": "You are Manus File Processing Agent with these specialized capabilities:\n\n**Document Analysis**:\n- Extract key information from PDFs, Word docs, and text files\n- Summarize content and identify main themes\n- Extract structured data from unstructured text\n\n**Data Analysis**:\n- Analyze CSV and Excel data for patterns and insights\n- Generate statistical summaries and trends\n- Identify anomalies and data quality issues\n\n**Image Processing**:\n- Perform OCR on images with text\n- Describe visual content and scenes\n- Extract information from charts, graphs, and diagrams\n\n**Code Analysis**:\n- Review code quality and structure\n- Identify potential bugs and improvements\n- Suggest optimizations and best practices\n\n**Content Generation**:\n- Create summaries and reports based on file content\n- Generate insights and recommendations\n- Format output according to user requirements\n\nAlways provide actionable insights and clear, well-structured responses.",
+          "maxIterations": 5,
+          "returnIntermediateSteps": true
+        }
+      },
+      "typeVersion": 1.5
+    },
+    {
+      "id": "openai-file-model",
+      "name": "OpenAI File Analysis Model",
+      "type": "@n8n/n8n-nodes-langchain.lmOpenAi",
+      "position": [1160, 140],
+      "parameters": {
+        "model": "gpt-4-vision-preview",
+        "options": {
+          "temperature": 0.4,
+          "maxTokens": 1500
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credentials",
+          "name": "OpenAI API"
+        }
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "generate-report",
+      "name": "Generate Analysis Report",
+      "type": "n8n-nodes-base.set",
+      "position": [1400, 300],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "analysis_report",
+              "name": "analysis_report",
+              "value": "# File Analysis Report\n\n**File:** {{ $('Extract File Information').item.json.file_name }}\n**Type:** {{ $('Extract File Information').item.json.file_type }}\n**Processed:** {{ $('Extract File Information').item.json.timestamp }}\n**User:** {{ $('Extract File Information').item.json.user_id }}\n**Request:** {{ $('Extract File Information').item.json.processing_request }}\n\n## Analysis Results\n\n{{ $json.output || $json.analysis || 'Analysis completed successfully' }}\n\n## Recommendations\n\n{{ $json.recommendations || 'Please review the analysis above for insights and next steps.' }}\n\n---\n*Generated by Manus AI File Processor*",
+              "type": "string"
+            },
+            {
+              "id": "file_metadata",
+              "name": "file_metadata",
+              "value": "{{ $('Extract File Information').item.json }}",
+              "type": "object"
+            },
+            {
+              "id": "processing_complete",
+              "name": "processing_complete",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "report_timestamp",
+              "name": "report_timestamp",
+              "value": "={{ $now }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "typeVersion": 3
+    },
+    {
+      "id": "save-to-drive",
+      "name": "Save Report to Google Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "position": [1600, 200],
+      "parameters": {
+        "operation": "upload",
+        "name": "Manus_Analysis_Report_{{ $('Extract File Information').item.json.file_name }}_{{ $now }}.md",
+        "parents": {
+          "__rl": true,
+          "mode": "list",
+          "value": "YOUR_DRIVE_FOLDER_ID"
+        },
+        "options": {
+          "convert": false
+        }
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "google-drive-credentials",
+          "name": "Google Drive API"
+        }
+      },
+      "typeVersion": 3
+    },
+    {
+      "id": "send-email-report",
+      "name": "Email Analysis Report",
+      "type": "n8n-nodes-base.emailSend",
+      "position": [1600, 300],
+      "parameters": {
+        "toEmail": "={{ $('Extract File Information').item.json.user_id }}",
+        "subject": "📊 File Analysis Complete: {{ $('Extract File Information').item.json.file_name }}",
+        "message": "Hello!\n\nManus has completed the analysis of your file: **{{ $('Extract File Information').item.json.file_name }}**\n\n{{ $('Generate Analysis Report').item.json.analysis_report }}\n\nThe detailed report has been saved to your Google Drive.\n\nBest regards,\nManus AI File Processor",
+        "options": {
+          "allowUnauthorizedCerts": false
+        }
+      },
+      "credentials": {
+        "smtp": {
+          "id": "smtp-credentials",
+          "name": "SMTP"
+        }
+      },
+      "typeVersion": 2.1
+    },
+    {
+      "id": "webhook-response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [1600, 400],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": {
+          "success": true,
+          "message": "File processed successfully by Manus AI",
+          "file_name": "={{ $('Extract File Information').item.json.file_name }}",
+          "analysis_summary": "={{ $('Generate Analysis Report').item.json.analysis_report.substring(0, 500) }}...",
+          "processing_timestamp": "={{ $('Generate Analysis Report').item.json.report_timestamp }}",
+          "report_saved": true
+        }
+      },
+      "typeVersion": 1.1
+    },
+    {
+      "id": "log-processing",
+      "name": "Log File Processing",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [1400, 500],
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "YOUR_PROCESSING_LOG_SHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "File Processing Log"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Timestamp": "={{ $('Generate Analysis Report').item.json.report_timestamp }}",
+            "File Name": "={{ $('Extract File Information').item.json.file_name }}",
+            "File Type": "={{ $('Extract File Information').item.json.file_type }}",
+            "User ID": "={{ $('Extract File Information').item.json.user_id }}",
+            "Processing Request": "={{ $('Extract File Information').item.json.processing_request }}",
+            "Status": "Completed",
+            "Agent": "Manus AI File Processor"
+          }
+        },
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets API"
+        }
+      },
+      "typeVersion": 4
+    }
+  ],
+  "connections": {
+    "File Upload Trigger": {
+      "main": [
+        [
+          {
+            "node": "Extract File Information",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract File Information": {
+      "main": [
+        [
+          {
+            "node": "Download File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download File": {
+      "main": [
+        [
+          {
+            "node": "Detect File Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect File Type": {
+      "main": [
+        [
+          {
+            "node": "Process PDF",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Text File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Image",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Excel",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Word Document",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process CSV",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Unknown File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process PDF": {
+      "main": [
+        [
+          {
+            "node": "Manus File Analyzer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Text File": {
+      "main": [
+        [
+          {
+            "node": "Manus File Analyzer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Image": {
+      "main": [
+        [
+          {
+            "node": "Manus File Analyzer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Excel": {
+      "main": [
+        [
+          {
+            "node": "Manus File Analyzer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Word Document": {
+      "main": [
+        [
+          {
+            "node": "Manus File Analyzer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process CSV": {
+      "main": [
+        [
+          {
+            "node": "Manus File Analyzer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Unknown File": {
+      "main": [
+        [
+          {
+            "node": "Manus File Analyzer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manus File Analyzer": {
+      "main": [
+        [
+          {
+            "node": "Generate Analysis Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Analysis Report": {
+      "main": [
+        [
+          {
+            "node": "Save Report to Google Drive",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Email Analysis Report",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log File Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI File Analysis Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Manus File Analyzer",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": {},
+  "active": false,
+  "createdAt": "2024-09-05T19:13:00.000Z",
+  "updatedAt": "2024-09-05T19:13:00.000Z"
+}

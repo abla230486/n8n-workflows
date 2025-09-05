@@ -368,6 +368,10 @@
       "category": "Communication & Messaging"
     },
     {
+      "integration": "Manus",
+      "category": "AI Agent Development"
+    },
+    {
       "integration": "Mattermost",
       "category": "Communication & Messaging"
     },

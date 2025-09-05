@@ -1,0 +1,450 @@
+{
+  "id": "ManusAIAgent2054",
+  "meta": {
+    "instanceId": "manus-ai-agent-instance",
+    "templateCredsSetupCompleted": false
+  },
+  "name": "Manus - Multi-Platform AI Agent",
+  "tags": ["ai-agent", "manus", "automation", "chatbot", "multi-platform"],
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "position": [200, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "manus-ai-agent",
+        "responseMode": "responseNode",
+        "options": {
+          "noResponseBody": false
+        }
+      },
+      "webhookId": "manus-ai-webhook-2054",
+      "typeVersion": 1
+    },
+    {
+      "id": "extract-message",
+      "name": "Extract Message Data",
+      "type": "n8n-nodes-base.set",
+      "position": [400, 300],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "user_message",
+              "name": "user_message",
+              "value": "={{ $json.body.message || $json.body.text || $json.body.content }}",
+              "type": "string"
+            },
+            {
+              "id": "user_id",
+              "name": "user_id",
+              "value": "={{ $json.body.user_id || $json.body.from || $json.body.author }}",
+              "type": "string"
+            },
+            {
+              "id": "platform",
+              "name": "platform",
+              "value": "={{ $json.body.platform || 'webhook' }}",
+              "type": "string"
+            },
+            {
+              "id": "channel_id",
+              "name": "channel_id",
+              "value": "={{ $json.body.channel_id || $json.body.chat_id || 'default' }}",
+              "type": "string"
+            },
+            {
+              "id": "timestamp",
+              "name": "timestamp",
+              "value": "={{ $now }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "typeVersion": 3
+    },
+    {
+      "id": "ai-agent",
+      "name": "Manus AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "position": [600, 300],
+      "parameters": {
+        "sessionIdTemplate": "manus-{{ $('Extract Message Data').item.json.user_id }}-{{ $('Extract Message Data').item.json.platform }}",
+        "promptTemplate": "You are Manus, an intelligent AI assistant that helps users with various tasks across multiple platforms. You have access to multiple tools and services.\n\nUser Information:\n- Platform: {{ $('Extract Message Data').item.json.platform }}\n- User ID: {{ $('Extract Message Data').item.json.user_id }}\n- Channel: {{ $('Extract Message Data').item.json.channel_id }}\n\nCurrent message: {{ $('Extract Message Data').item.json.user_message }}\n\nPlease provide a helpful, context-aware response. If the user asks you to perform a task that requires external tools or services, explain what you would do and ask for any necessary information or permissions.",
+        "options": {
+          "systemMessage": "You are Manus, a sophisticated AI agent with the following capabilities:\n\n1. **Multi-Platform Communication**: Handle conversations across Slack, Discord, Telegram, Email, and webhooks\n2. **Task Automation**: Automate various business processes and integrations\n3. **Information Retrieval**: Search and retrieve information from various sources\n4. **Context Awareness**: Maintain conversation history and context\n5. **Service Integration**: Connect with popular services like Google Drive, Notion, Airtable, etc.\n\nKey Principles:\n- Be helpful, accurate, and professional\n- Maintain context across conversations\n- Ask clarifying questions when needed\n- Explain your capabilities when relevant\n- Handle errors gracefully\n- Respect user privacy and security",
+          "maxIterations": 5,
+          "returnIntermediateSteps": true
+        }
+      },
+      "typeVersion": 1.5
+    },
+    {
+      "id": "memory-vector-store",
+      "name": "Conversation Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryVectorStoreRetriever",
+      "position": [560, 140],
+      "parameters": {
+        "mode": "load",
+        "topK": 5,
+        "similarityThreshold": 0.8
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "openai-model",
+      "name": "OpenAI GPT Model",
+      "type": "@n8n/n8n-nodes-langchain.lmOpenAi",
+      "position": [640, 140],
+      "parameters": {
+        "model": "gpt-4",
+        "options": {
+          "temperature": 0.7,
+          "maxTokens": 1000
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credentials",
+          "name": "OpenAI API"
+        }
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "format-response",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.set",
+      "position": [800, 300],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "response_text",
+              "name": "response_text",
+              "value": "={{ $json.output || $json.text || 'I apologize, but I encountered an issue processing your request.' }}",
+              "type": "string"
+            },
+            {
+              "id": "response_platform",
+              "name": "response_platform",
+              "value": "={{ $('Extract Message Data').item.json.platform }}",
+              "type": "string"
+            },
+            {
+              "id": "response_user_id",
+              "name": "response_user_id",
+              "value": "={{ $('Extract Message Data').item.json.user_id }}",
+              "type": "string"
+            },
+            {
+              "id": "response_channel_id",
+              "name": "response_channel_id",
+              "value": "={{ $('Extract Message Data').item.json.channel_id }}",
+              "type": "string"
+            },
+            {
+              "id": "timestamp",
+              "name": "timestamp",
+              "value": "={{ $now }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "typeVersion": 3
+    },
+    {
+      "id": "platform-router",
+      "name": "Platform Response Router",
+      "type": "n8n-nodes-base.switch",
+      "position": [1000, 300],
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $('Extract Message Data').item.json.platform }}",
+        "rules": {
+          "rules": [
+            {
+              "value2": "slack",
+              "output": 0
+            },
+            {
+              "value2": "discord",
+              "output": 1
+            },
+            {
+              "value2": "telegram",
+              "output": 2
+            },
+            {
+              "value2": "email",
+              "output": 3
+            }
+          ]
+        },
+        "fallbackOutput": 4
+      },
+      "typeVersion": 3
+    },
+    {
+      "id": "slack-response",
+      "name": "Send to Slack",
+      "type": "n8n-nodes-base.slack",
+      "position": [1200, 100],
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "channel": "={{ $('Extract Message Data').item.json.channel_id }}",
+        "text": "={{ $('Format Response').item.json.response_text }}",
+        "otherOptions": {
+          "thread_ts": "={{ $json.body.thread_ts }}"
+        }
+      },
+      "credentials": {
+        "slackApi": {
+          "id": "slack-credentials",
+          "name": "Slack API"
+        }
+      },
+      "typeVersion": 2.1
+    },
+    {
+      "id": "discord-response",
+      "name": "Send to Discord",
+      "type": "n8n-nodes-base.discord",
+      "position": [1200, 200],
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "channelId": "={{ $('Extract Message Data').item.json.channel_id }}",
+        "content": "={{ $('Format Response').item.json.response_text }}"
+      },
+      "credentials": {
+        "discordApi": {
+          "id": "discord-credentials",
+          "name": "Discord API"
+        }
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "telegram-response",
+      "name": "Send to Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "position": [1200, 300],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $('Extract Message Data').item.json.channel_id }}",
+        "text": "={{ $('Format Response').item.json.response_text }}"
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-credentials",
+          "name": "Telegram API"
+        }
+      },
+      "typeVersion": 1.1
+    },
+    {
+      "id": "email-response",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "position": [1200, 400],
+      "parameters": {
+        "toEmail": "={{ $('Extract Message Data').item.json.user_id }}",
+        "subject": "Response from Manus AI Agent",
+        "message": "={{ $('Format Response').item.json.response_text }}",
+        "options": {}
+      },
+      "credentials": {
+        "smtp": {
+          "id": "smtp-credentials",
+          "name": "SMTP"
+        }
+      },
+      "typeVersion": 2.1
+    },
+    {
+      "id": "webhook-response",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [1200, 500],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": {
+          "success": true,
+          "response": "={{ $('Format Response').item.json.response_text }}",
+          "platform": "={{ $('Format Response').item.json.response_platform }}",
+          "user_id": "={{ $('Format Response').item.json.response_user_id }}",
+          "timestamp": "={{ $('Format Response').item.json.timestamp }}"
+        }
+      },
+      "typeVersion": 1.1
+    },
+    {
+      "id": "log-conversation",
+      "name": "Log Conversation",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [1000, 500],
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "YOUR_GOOGLE_SHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "Manus Conversations"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Timestamp": "={{ $('Format Response').item.json.timestamp }}",
+            "Platform": "={{ $('Format Response').item.json.response_platform }}",
+            "User ID": "={{ $('Format Response').item.json.response_user_id }}",
+            "Channel": "={{ $('Format Response').item.json.response_channel_id }}",
+            "User Message": "={{ $('Extract Message Data').item.json.user_message }}",
+            "AI Response": "={{ $('Format Response').item.json.response_text }}"
+          }
+        },
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets API"
+        }
+      },
+      "typeVersion": 4
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Extract Message Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Message Data": {
+      "main": [
+        [
+          {
+            "node": "Manus AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manus AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [
+          {
+            "node": "Platform Response Router",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Platform Response Router": {
+      "main": [
+        [
+          {
+            "node": "Send to Slack",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send to Discord",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send to Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conversation Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Manus AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI GPT Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Manus AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": {},
+  "active": false,
+  "createdAt": "2024-09-05T19:13:00.000Z",
+  "updatedAt": "2024-09-05T19:13:00.000Z"
+}
